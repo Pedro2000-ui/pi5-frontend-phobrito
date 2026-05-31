@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@assets/*": [
+        "./src/assets/*"
+      ],
+      "@core/*": [
+        "./src/core/*"
+      ],
+      "@feature/*": [
+        "./src/feature/*"
+      ],
+      "@routes/*": [
+        "./src/routes/*"
+      ],
+      "@styles/*": [
+        "./src/styles/*"
+      ],
+      "@ui/*": [
+        "./src/ui/*"
+      ]
+    }
+  }
+}
