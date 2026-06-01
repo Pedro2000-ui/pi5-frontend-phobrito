@@ -1,5 +1,11 @@
 import { apiClient } from '@core/helpers/fetch';
 
+export function getMe() {
+  return apiClient('/players/me', {
+    method: 'GET',
+  });
+}
+
 export function listPlayers() {
   return apiClient('/players', {
     method: 'GET',
