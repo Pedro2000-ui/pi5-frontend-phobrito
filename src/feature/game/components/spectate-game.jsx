@@ -4,7 +4,6 @@ import { Typography } from '@ui/text/typography';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useGameContext } from '../context/game-context';
-import { SpectatorRegisterForm } from './spectator-register-form';
 import ViewGame from './view-game';
 
 function ActionButton({ onClick, disabled, color = '#00ff88', children }) {
@@ -36,6 +35,19 @@ function ActionButton({ onClick, disabled, color = '#00ff88', children }) {
     </button>
   );
 }
+function resolveTeamSlot(game, playerId) {
+  const turingId = game?.turing_player?.id;
+  const lovelaceId = game?.lovelace_player?.id;
+
+  // Se já está em algum slot, retorna o seu
+  if (turingId === playerId) return '1';
+  if (lovelaceId === playerId) return '2';
+
+  // Slots livres: prefere o 1, depois o 2
+  if (!turingId) return '1';
+  if (!lovelaceId) return '2';
+  return '1';
+}
 
 export function SpectateGame({ gameId }) {
   const { spectator: storedSpectator, player, setSpectator: saveSpectator } = useGameContext();
@@ -62,6 +74,17 @@ export function SpectateGame({ gameId }) {
     ? { ...game, ...(gameState ?? {}) }
     : gameState;
 
+  const isPlayer = player && (
+    player.id === currentGame?.turing_player?.id ||
+    player.id === currentGame?.lovelace_player?.id
+  );
+  const isWaiting = currentGame?.status === 'WAITING_PLAYERS';
+  const isPaused = currentGame?.status === 'PAUSED';
+  const isFinished = currentGame?.status === 'FINISHED';
+  const canJoin = isWaiting && player && !isPlayer;
+  const canStart = isPaused && isPlayer;
+  const canWatch = spectator || isPlayer;
+
   async function fetchGame() {
     try {
       const data = await getGame(gameId);
@@ -75,21 +98,37 @@ export function SpectateGame({ gameId }) {
 
   useEffect(() => { fetchGame(); }, [gameId]);
 
-
+  // Auto-registro como espectador ao entrar na página (se logado e ainda não registrado)
+  useEffect(() => {
+    if (!player || loadingGame || spectator || isPlayer) return;
+    registerSpectator(gameId, {
+      spectator_name: player.ai_player_name || `Jogador #${player.id}`,
+      spectator_avatar: player.ai_player_avatar || 'https://example.com/avatar.png',
+    })
+      .then((data) => {
+        if (data?.spectator_access_token) {
+          saveSpectator({ ...data, game_id: Number(gameId) });
+        }
+      })
+      .catch((err) => console.warn('Não foi possível registrar como espectador:', err));
+  }, [player, loadingGame, gameId]);
 
   async function handleJoin() {
     setLoadingJoin(true); setFeedback(null);
     try {
-      await joinGame(gameId, { player_id: player?.id, team_slot: 2 });
+      const teamSlot = resolveTeamSlot(currentGame, player?.id);
+      await joinGame(gameId, { player_id: player?.id, team_slot: teamSlot });
 
-      // Registra automaticamente como espectador se ainda não for
+      // Registra como espectador se ainda não for
       if (!spectator) {
         try {
           const spectatorData = await registerSpectator(gameId, {
             spectator_name: player?.ai_player_name || `Jogador #${player?.id}`,
             spectator_avatar: player?.ai_player_avatar || 'https://example.com/avatar.png',
           });
-          saveSpectator(spectatorData);
+          if (spectatorData?.spectator_access_token) {
+            saveSpectator({ ...spectatorData, game_id: Number(gameId) });
+          }
         } catch (specErr) {
           console.warn('Não foi possível registrar como espectador:', specErr);
         }
@@ -106,14 +145,15 @@ export function SpectateGame({ gameId }) {
     try {
       await startGame(gameId);
 
-      // Registra automaticamente como espectador se ainda não for
       if (!spectator) {
         try {
           const spectatorData = await registerSpectator(gameId, {
             spectator_name: player?.ai_player_name || `Jogador #${player?.id}`,
             spectator_avatar: player?.ai_player_avatar || 'https://example.com/avatar.png',
           });
-          saveSpectator(spectatorData);
+          if (spectatorData?.spectator_access_token) {
+            saveSpectator({ ...spectatorData, game_id: Number(gameId) });
+          }
         } catch (specErr) {
           console.warn('Não foi possível registrar como espectador:', specErr);
         }
@@ -124,18 +164,6 @@ export function SpectateGame({ gameId }) {
     } catch { setFeedback({ type: 'error', msg: 'Erro ao iniciar a partida.' }); }
     finally { setLoadingStart(false); }
   }
-
-  const isWaiting = currentGame?.status === 'WAITING_PLAYERS';
-  const isPaused = currentGame?.status === 'PAUSED';
-  const isFinished = currentGame?.status === 'FINISHED';
-
-  // Só pode iniciar se for jogador da partida E estiver pausada
-  const canStart = isPaused && isPlayer;
-  // Só pode entrar se estiver esperando jogadores (e não for já jogador)
-  const canJoin = isWaiting && player && !isPlayer;
-
-  const isPlayer = player && (player.id === currentGame?.turing_player?.id || player.id === currentGame?.lovelace_player?.id);
-  const canWatch = spectator || isPlayer;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -165,9 +193,9 @@ export function SpectateGame({ gameId }) {
           </>
         )}
 
-        {!game?.status !== 'FINISHED' && (
+        {!isFinished && (
           <div style={{ marginLeft: 'auto', fontFamily: 'Share Tech Mono', fontSize: '0.6rem', color: '#00ff8855', letterSpacing: '0.1em' }}>
-            {!isFinished ? '● AO VIVO' : ''}
+            ● AO VIVO
           </div>
         )}
       </div>
@@ -178,28 +206,10 @@ export function SpectateGame({ gameId }) {
         </div>
       )}
 
-
-      {/* Registro de espectador — só se não for jogador e não tiver token (para acompanhar ao vivo) */}
-      {!loadingGame && !isPlayer && !spectator && (
-        <div style={{ border: '1px solid #1e3a4a', background: '#0d1117', padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 3, height: 32, background: '#ffe600', boxShadow: '0 0 8px #ffe600' }} />
-            <Typography variant={'h3'} style={{ fontFamily: 'Orbitron', fontSize: '0.85rem', letterSpacing: '0.1em', color: '#ffe600', textShadow: '0 0 10px #ffe60055' }}>
-              REGISTRO DE ESPECTADOR
-            </Typography>
-          </div>
-          <Typography variant={'p'} style={{ fontSize: '0.85rem' }}>
-            Registre-se como espectador para acompanhar a partida em tempo real.
-          </Typography>
-          <SpectatorRegisterForm gameId={gameId} />
-        </div>
-      )}
-
-      {/* Tabuleiro — visível para todos que acessarem a página */}
+      {/* Tabuleiro — visível para todos */}
       {!loadingGame && currentGame && (
         <ViewGame gameData={currentGame} />
       )}
-
     </div>
   );
 }

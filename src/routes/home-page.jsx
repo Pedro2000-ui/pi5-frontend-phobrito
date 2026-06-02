@@ -1,10 +1,21 @@
 import { cn } from '@core/helpers';
-import { joinGame, listGames, startGame } from '@feature/game/api';
+import { joinGame, listGames, registerSpectator, startGame } from '@feature/game/api';
 import { useGameContext } from '@feature/game/context/game-context';
 import { Typography } from '@ui/text/typography';
 import { useState } from 'react';
 import { useEffect } from 'react';
 import { Link } from 'react-router';
+
+// Determina o team_slot correto com base nos slots já ocupados na partida
+function resolveTeamSlot(game, playerId) {
+  const turingId = game?.turing_player?.id;
+  const lovelaceId = game?.lovelace_player?.id;
+  if (turingId === playerId) return '1';
+  if (lovelaceId === playerId) return '2';
+  if (!turingId) return '1';
+  if (!lovelaceId) return '2';
+  return '1';
+}
 
 const PAGE_SIZE = 10;
 
@@ -47,6 +58,7 @@ function NavButton({ onClick, disabled, children }) {
 }
 
 function GameRow({ game, player, onRefresh }) {
+  const { spectator: storedSpectator, setSpectator: saveSpectator } = useGameContext();
   const st = getStatus(game?.status);
   const isFinished = game?.status === 'FINISHED';
   const isWaiting = game?.status === 'WAITING_PLAYERS';
@@ -69,16 +81,20 @@ function GameRow({ game, player, onRefresh }) {
     setLoadingJoin(true);
     setFeedback(null);
     try {
-      await joinGame(game.id, { player_id: player?.id, team_slot: 2 });
+      const teamSlot = resolveTeamSlot(game, player?.id);
+      await joinGame(game.id, { player_id: player?.id, team_slot: teamSlot });
 
       // Registra automaticamente como espectador se ainda não for
+      const spectator = storedSpectator?.[game.id];
       if (!spectator) {
         try {
-          const spectatorData = await registerSpectator(gameId, {
+          const spectatorData = await registerSpectator(game.id, {
             spectator_name: player?.ai_player_name || `Jogador #${player?.id}`,
             spectator_avatar: player?.ai_player_avatar || 'https://example.com/avatar.png',
           });
-          saveSpectator(spectatorData);
+          if (spectatorData?.spectator_access_token) {
+            saveSpectator({ ...spectatorData, game_id: game.id });
+          }
         } catch (specErr) {
           console.warn('Não foi possível registrar como espectador:', specErr);
         }
@@ -100,13 +116,16 @@ function GameRow({ game, player, onRefresh }) {
       await startGame(game.id);
 
       // Registra automaticamente como espectador se ainda não for
+      const spectator = storedSpectator?.[game.id];
       if (!spectator) {
         try {
-          const spectatorData = await registerSpectator(gameId, {
+          const spectatorData = await registerSpectator(game.id, {
             spectator_name: player?.ai_player_name || `Jogador #${player?.id}`,
             spectator_avatar: player?.ai_player_avatar || 'https://example.com/avatar.png',
           });
-          saveSpectator(spectatorData);
+          if (spectatorData?.spectator_access_token) {
+            saveSpectator({ ...spectatorData, game_id: game.id });
+          }
         } catch (specErr) {
           console.warn('Não foi possível registrar como espectador:', specErr);
         }

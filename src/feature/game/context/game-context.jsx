@@ -19,16 +19,20 @@ export const GameContextProvider = ({ children }) => {
   );
 
   function setSpectator(value) {
-    setSpectatorData(() => {
-      return Object.assign({}, spectator, {
-        [value?.game_id]: value,
+    if (!value) {
+      setSpectatorData(null);
+      return;
+    }
+    setSpectatorData((prev) => {
+      return Object.assign({}, prev, {
+        [value.game_id]: value,
       });
     });
   }
 
   function logout() {
     setPlayer(null);
-    setSpectator(null);
+    setSpectatorData(null);
   }
 
   useEffect(() => {
