@@ -38,11 +38,9 @@ function ActionButton({ onClick, disabled, color = '#00ff88', children }) {
 function resolveTeamSlot(game, playerId) {
   const turingId = game?.turing_player?.id;
   const lovelaceId = game?.lovelace_player?.id;
-
   // Se já está em algum slot, retorna o seu
   if (turingId === playerId) return '1';
   if (lovelaceId === playerId) return '2';
-
   // Slots livres: prefere o 1, depois o 2
   if (!turingId) return '1';
   if (!lovelaceId) return '2';
@@ -52,7 +50,7 @@ function resolveTeamSlot(game, playerId) {
 export function SpectateGame({ gameId }) {
   const { spectator: storedSpectator, player, setSpectator: saveSpectator } = useGameContext();
   const [game, setGame] = useState(null);
-  const [loadingGame, setLoadingGame] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [loadingStart, setLoadingStart] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -65,7 +63,6 @@ export function SpectateGame({ gameId }) {
     if (storedSpectator?.[gameId]) setSpectator(storedSpectator?.[gameId]);
   }, [storedSpectator]);
 
-  // WebSocket — conecta assim que tiver token (espectador ou jogador)
   const wsToken = spectator?.spectator_access_token ?? player?.player_access_token;
   const { gameState } = useGameSocket(gameId, wsToken);
 
@@ -83,7 +80,6 @@ export function SpectateGame({ gameId }) {
   const isFinished = currentGame?.status === 'FINISHED';
   const canJoin = isWaiting && player && !isPlayer;
   const canStart = isPaused && isPlayer;
-  const canWatch = spectator || isPlayer;
 
   async function fetchGame() {
     try {
@@ -92,18 +88,27 @@ export function SpectateGame({ gameId }) {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoadingGame(false);
+      setInitialLoading(false);
     }
   }
 
   useEffect(() => { fetchGame(); }, [gameId]);
 
-  // Auto-registro como espectador ao entrar na página (se logado e ainda não registrado)
+  // Auto-registro como espectador ao entrar na página:
+  // - Se tiver player logado: usa o nome e avatar do player
+  // - Se for visitante puro: registra com nome genérico
+  // - Só pula se já tiver token de espectador ou for jogador da partida (tem player_access_token)
   useEffect(() => {
-    if (!player || loadingGame || spectator || isPlayer) return;
+    if (initialLoading || spectator) return;
+    // Jogadores da partida usam player_access_token — não precisam de token de espectador
+    if (isPlayer) return;
+
+    const name = player?.ai_player_name || 'Espectador';
+    const avatar = player?.ai_player_avatar || undefined;
+
     registerSpectator(gameId, {
-      spectator_name: player.ai_player_name || `Jogador #${player.id}`,
-      spectator_avatar: player.ai_player_avatar || 'https://example.com/avatar.png',
+      spectator_name: name,
+      ...(avatar ? { spectator_avatar: avatar } : {}),
     })
       .then((data) => {
         if (data?.spectator_access_token) {
@@ -111,7 +116,7 @@ export function SpectateGame({ gameId }) {
         }
       })
       .catch((err) => console.warn('Não foi possível registrar como espectador:', err));
-  }, [player, loadingGame, gameId]);
+  }, [initialLoading, isPlayer, gameId]);
 
   async function handleJoin() {
     setLoadingJoin(true); setFeedback(null);
@@ -207,7 +212,7 @@ export function SpectateGame({ gameId }) {
       )}
 
       {/* Tabuleiro — visível para todos */}
-      {!loadingGame && currentGame && (
+      {!initialLoading && currentGame && (
         <ViewGame gameData={currentGame} />
       )}
     </div>

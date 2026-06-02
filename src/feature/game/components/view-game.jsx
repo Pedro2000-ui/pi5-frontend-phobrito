@@ -229,18 +229,20 @@ function StatusBadge({ status }) {
 }
 
 export default function ViewGame({ gameId, gameData }) {
-    const [game, setGame] = useState(gameData ?? null);
-    const [loading, setLoading] = useState(!gameData);
+    const [localGame, setLocalGame] = useState(null);
+    const [loading, setLoading] = useState(!gameData && !!gameId);
 
     useEffect(() => {
-        if (gameData) { setGame(gameData); return; }
+        if (gameData) return;
         if (!gameId) return;
         setLoading(true);
         getGame(gameId)
-            .then(setGame)
+            .then(setLocalGame)
             .catch(console.error)
             .finally(() => setLoading(false));
-    }, [gameId, gameData]);
+    }, [gameId]);
+
+    const game = gameData ?? localGame;
 
     if (loading) {
         return (
