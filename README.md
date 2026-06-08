@@ -55,3 +55,4 @@ O projeto foi organizado de modo que vocês possam importar módulos utilizando 
   bun dev
   ```
 - O projeto será executado em [`https://localhost:5173`](https://localhost:5173)
+- URL Produção: https://pi5-frontend-phobrito-napdwffnl-phobrito.vercel.app/
