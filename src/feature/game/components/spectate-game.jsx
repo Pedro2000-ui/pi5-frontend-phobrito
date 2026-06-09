@@ -64,7 +64,8 @@ export function SpectateGame({ gameId }) {
   }, [storedSpectator]);
 
   const wsToken = spectator?.spectator_access_token ?? player?.player_access_token;
-  const { gameState } = useGameSocket(gameId, wsToken);
+  const gameIsFinished = game?.status === 'FINISHED';
+  const { gameState } = useGameSocket(gameId, wsToken, !initialLoading && !gameIsFinished);
 
   // WS só atualiza campos dinâmicos — merge com os dados fixos do getGame
   const currentGame = game

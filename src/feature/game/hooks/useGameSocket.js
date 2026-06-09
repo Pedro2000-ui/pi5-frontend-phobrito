@@ -2,17 +2,28 @@ import { API_BASE_URL } from '@core/constants';
 import { resolveWebSocketURL } from '@core/helpers';
 import { useEffect, useRef, useState } from 'react';
 
-export function useGameSocket(gameId, token) {
+export function useGameSocket(gameId, token, enabled = true) {
   const [connected, setConnected] = useState(false);
   const [currentGameState, setCurrentGameState] = useState(null);
   const [mounted, setMounted] = useState(false);
 
   const reconnectTimeout = useRef(null);
-
   const webSocketRef = useRef(null);
+  const enabledRef = useRef(enabled);
+
+  // Mantém o ref sempre atualizado com o valor mais recente de enabled
+  useEffect(() => {
+    enabledRef.current = enabled;
+
+    // Se ficou disabled enquanto havia conexão aberta, fecha imediatamente
+    if (!enabled) {
+      if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+      webSocketRef.current?.close();
+    }
+  }, [enabled]);
 
   useEffect(() => {
-    if (!gameId || !token || !mounted) return;
+    if (!gameId || !token || !mounted || !enabled) return;
 
     function connect() {
       const url = new URL(`api/v1/ws/games/${gameId}`, API_BASE_URL);
@@ -40,9 +51,9 @@ export function useGameSocket(gameId, token) {
 
       ws.onclose = () => {
         setConnected(false);
-        // Reconecta automaticamente após 2 segundos se a partida ainda estiver ativa
+        // Só reconecta se ainda estiver habilitado — lê o ref para pegar o valor atual
         reconnectTimeout.current = setTimeout(() => {
-          if (gameId) connect();
+          if (gameId && enabledRef.current) connect();
         }, 2000);
       };
 
@@ -58,7 +69,7 @@ export function useGameSocket(gameId, token) {
       if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
       webSocketRef.current?.close();
     };
-  }, [gameId, token, mounted]);
+  }, [gameId, token, mounted, enabled]);
 
   useEffect(() => {
     setMounted(true);
